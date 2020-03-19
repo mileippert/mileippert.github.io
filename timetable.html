@@ -20,12 +20,12 @@
 
 <body>
   <div id="app">
-    <nav>
+    <nav class="teal">
       <div class="nav-wrapper">
         <ul id="nav-mobile" class="left">
           <li><a @click="reset">Reset</a></li>
           <li><a @click="persist">Save</a></li>
-          <li><a @click="clipboard">Copy</a></li>
+          <li><a class="modal-trigger" href="#modal1">Settings</a></li>
         </ul>
         <a href="#" class="brand-logo center">TimeTable</a>
         <ul id="nav-mobile" class="right">
@@ -35,6 +35,26 @@
       </div>
     </nav>
   
+    <!-- Modal Structure -->
+    <div id="modal1" class="modal">
+      <div class="modal-content">
+        <form>
+          <div class="row">
+            <div class="input-field">
+              <input id="workhours" type="number" v-model="workhours">
+              <label for="workhours" class="">workhours per week</label>
+            </div>
+          </div>
+          <div class="row">
+            <a class="waves-effect waves-light btn" @click="force_month_switch">advance to next month (data loss!)</a>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close Settings Menu</a>
+      </div>
+    </div>
+          
     <div class="container">
       <table>
         <thead>
@@ -54,12 +74,12 @@
             </td>
             <td>
               <div class="input-field">
-                <input v-model.lazy="day.arr" type="text" class="arrtimepicker" step="3">
+                <input v-model.lazy="day.arr" type="text" class="arrtimepicker">
               </div>
             </td>
             <td>
               <div class="input-field">
-                <input v-model.lazy="day.dep" type="text" class="deptimepicker" step="3">
+                <input v-model.lazy="day.dep" type="text" class="deptimepicker">
               </div>
             </td>
             <td>
@@ -91,6 +111,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue-toasted/1.1.28/vue-toasted.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     var elems = document.querySelectorAll('.arrtimepicker');
@@ -98,96 +119,134 @@
       defaultTime: "now",
       fromNow: -5*60*1000,
       twelveHour: false,
-      autoclose: true,
+      autoClose: true,
+      showClearBtn: true,
+      duration: 100,
     });
     var elems = document.querySelectorAll('.deptimepicker');
     M.Timepicker.init(elems, {
       defaultTime: "now",
       fromNow: 5*60*1000,
       twelveHour: false,
-      autoclose: true,
+      autoClose: true,
+      showClearBtn: true,
+      duration: 100,
     });
+    var elems = document.querySelectorAll('.modal');
+    var instances = M.Modal.init(elems, {});
   });
 
-  var app = new Vue({
+  Vue.use(Toasted, {
+  });
+  var vm = new Vue({
   el: '#app',
   data: {
-    workhours: 8,
-
-    dirty: false,
+    workhours: 35,
     data: null,
     current_month: null,
+    current_data: null,
     previous_data: null,
-    current_data: [
-      {arr:"07:00", dep:"15:00", pause:"0.75"},
-      {arr:"09:00", dep:"14:00", pause:"0.00"},
-      {arr:null, dep:null, pause:null},
-    ],
   },
   mounted() {
-    // init month to current
-    this.data = this.current_data;
-    this.current_month = moment().month() + 1;
+    this.$nextTick(function () {
+      // init month to current
+      this.data = this.current_data;
 
-    if (window.localStorage) {
-      console.log('localstorage is available')
-      
-      // check if current data does exist in local storage
-      if (localStorage.current_data) { 
-        // check if data is for current month
-        if (parseInt(localStorage.current_month) != this.current_month) {
-          console.log("new month has begun, moving current data to previous");
-          localStorage.previous_data = localStorage.current_data;
-          localStorage.current_month = this.current_month;
-          localStorage.current_data = null;
+      try {
+        if (window.localStorage) {
+          console.log('localstorage is available')
+          
+          // check if localstorage contains workhours value
+          if (localStorage.workhours) {
+            this.workhours = parseInt(localStorage.workhours);
+          }
+
+          // load or create array for current month
+          if (localStorage.current_data) { 
+            this.current_data = JSON.parse(localStorage.current_data);
+            this.current_month = parseInt(localStorage.current_month);
+            if (this.current_data == null) {
+              this.reset();
+              console.log("data for current month not found, new array has been created...");
+            } else {
+              console.log("current data found and loaded...");
+              this.data = this.current_data;
+            }
+          } else {
+            this.reset();
+          }
+
+          // also load previous data if available
+          if (localStorage.previous_data) { 
+            this.previous_data = JSON.parse(localStorage.previous_data); 
+            console.log('previous data found and loaded');
+          } else {
+            console.log('no previous data available');
+          }
+
+          if (localStorage.current_data) { 
+            // check if current data does exist in local storage
+            stored_month = parseInt(localStorage.current_month);
+            actual_month = moment().month() + 1;
+
+            if (stored_month != actual_month) { // does not actually need to be the previous month
+              // mismatch between stored and actual month, move data to previous and update month
+              console.log("new month has begun, moving current data to previous");
+              this.$toasted.info("new month has started, hit save button to persist", {duration:10000});
+
+              this.previous_data = this.current_data;
+              this.current_month = actual_month;
+              this.reset();
+            }
+          }
+        } else {
+          this.$toasted.error("error while initializing application:<br>check browser console for further details", {
+            position: "top-center",
+            className: "center-align",
+          });
         }
+      } catch (e) {
+        this.$toasted.error("local storage is not available:<br><br>" + e, {
+          position: "top-center",
+          className: "center-align",
+        });
       }
-      
-      // load or create array for current month
-      if (localStorage.current_data) { 
-        this.current_data = JSON.parse(localStorage.current_data);
-        this.data = this.current_data;
-        console.log('current data found and loaded...');
-      } else {
-        this.reset();
-      }
-
-      // also load previous data if available
-      if (localStorage.previous_data) { 
-        this.previous_data = JSON.parse(localStorage.previous_data); 
-        console.log('previous data found and loaded');
-      } else {
-        console.log('no previous data available');
-      }
-    }
+    })
   },
   methods: {
     show_previous_month() {
       this.data = this.previous_data;
-      console.log("switched to previous month")
     },
     show_current_month() {
       this.data = this.current_data;
-      console.log("switched to current month")
     },
     persist() {
-      localStorage.current_data = JSON.stringify(this.current_data);
+      localStorage.workhours = this.workhours;
       localStorage.current_month = this.current_month;
-      if (localStorage.previous_data)
-        localStorage.previous_data = JSON.stringify(this.previous_data);
+      localStorage.current_data = JSON.stringify(this.current_data);
+      localStorage.previous_data = JSON.stringify(this.previous_data);
       console.log('saved...');
     },
     reset() {
       days = moment().endOf("month").date();
       this.current_data = new Array(days);
+      this.current_month = moment().month() + 1;
       for (day = 0; day < days; day++) {
-        this.current_data[day] = new Map([["arr", null], ["dep", null], ["pause", null]]);
-        console.log(this.current_data[day])
+        Vue.set(vm.current_data, day, {arr: null, dep: null, pause: null});
+        console.log(this.current_data[day]);
       }
       this.data = this.current_data;
-      console.log('new array for current data has been created...');
+      this.$toasted.info("new data object has been created for the current month. use save button to persist", {duration: 3000});
+      console.log('new array for current month has been created...');
     },
-    clipboard() {},
+    force_month_switch() {
+      this.$toasted.info("forcing month switch, reloading in 5 seconds...", {
+        duration: 5000, onComplete: function() {
+          localStorage.current_month = this.current_month - 1;
+          location.reload();
+        }
+      });
+    },
     calculate(data) {
       try {
         arrival = moment(data.arr, "HH:mm");
@@ -197,13 +256,18 @@
         if (!daily.isValid()) {
           return "";
         }
-        value = daily.asHours().toFixed(2) + " / " + (daily.asHours() - this.workhours).toFixed(2);
+        value = daily.asHours().toFixed(2) + " / " + (daily.asHours() - parseInt(this.workhours)/5).toFixed(2);
         return value;
       } catch (e) {
         console.log(e);
       }
     },
-  }
+  },
+  watch: {
+    workhours: function (hours) {
+      this.workhours = parseInt(hours);
+    }
+  },
 })
 
 </script>
