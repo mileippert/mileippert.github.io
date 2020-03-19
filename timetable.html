@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" media="screen,projection">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <style>
+      .input-field {
+        margin-top: 0;
+        margin-bottom: 0;
+      }
+
+      tr > td {
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+    </style>
+</head>
+
+<body>
+  <div id="app">
+    <nav>
+      <div class="nav-wrapper">
+        <ul id="nav-mobile" class="left">
+          <li><a @click="reset">Reset</a></li>
+          <li><a @click="persist">Save</a></li>
+          <li><a @click="clipboard">Copy</a></li>
+        </ul>
+        <a href="#" class="brand-logo center">TimeTable</a>
+        <ul id="nav-mobile" class="right">
+          <li><a @click="show_previous_month" v-if="previous_data != null">Last</a></li>
+          <li><a @click="show_current_month" v-if="previous_data != null">Current</a></li>
+        </ul>
+      </div>
+    </nav>
+  
+    <div class="container">
+      <table>
+        <thead>
+          <tr>
+            <th>Day</th>
+            <th>Arrival</th>
+            <th>Departure</th>
+            <th>Pause</th>
+            <th>Work/Overtime</th>
+          </tr>
+        </thead>
+    
+        <tbody>
+          <tr v-for="(day, index) in data">
+            <td>
+              {{ index+1 }}
+            </td>
+            <td>
+              <div class="input-field">
+                <input v-model.lazy="day.arr" type="text" class="arrtimepicker" step="3">
+              </div>
+            </td>
+            <td>
+              <div class="input-field">
+                <input v-model.lazy="day.dep" type="text" class="deptimepicker" step="3">
+              </div>
+            </td>
+            <td>
+              <div class="input-field">
+                <input v-model.lazy="day.pause" placeholde="0.75" list="pausetimes" class="validate">
+              </div>
+            </td>
+            <td>
+              <div class="input-field">
+                {{ calculate(day) }}
+              </div>
+            </td>
+          </tr>
+        </tbody>
+        <datalist id="pausetimes">
+          <option value="0.00">
+          <option value="0.25">
+          <option value="0.50">
+          <option value="0.75">
+          <option value="1.00">
+          <option value="1.25">
+          <option value="1.50">
+          <option value="1.75">
+          <option value="2.00">
+        </datalist>
+      </table>
+    </div>
+  </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var elems = document.querySelectorAll('.arrtimepicker');
+    M.Timepicker.init(elems, {
+      defaultTime: "now",
+      fromNow: -5*60*1000,
+      twelveHour: false,
+      autoclose: true,
+    });
+    var elems = document.querySelectorAll('.deptimepicker');
+    M.Timepicker.init(elems, {
+      defaultTime: "now",
+      fromNow: 5*60*1000,
+      twelveHour: false,
+      autoclose: true,
+    });
+  });
+
+  var app = new Vue({
+  el: '#app',
+  data: {
+    workhours: 8,
+
+    dirty: false,
+    data: null,
+    current_month: null,
+    previous_data: null,
+    current_data: [
+      {arr:"07:00", dep:"15:00", pause:"0.75"},
+      {arr:"09:00", dep:"14:00", pause:"0.00"},
+      {arr:null, dep:null, pause:null},
+    ],
+  },
+  mounted() {
+    // init month to current
+    this.data = this.current_data;
+    this.current_month = moment().month() + 1;
+
+    if (window.localStorage) {
+      console.log('localstorage is available')
+      
+      // check if current data does exist in local storage
+      if (localStorage.current_data) { 
+        // check if data is for current month
+        if (parseInt(localStorage.current_month) != this.current_month) {
+          console.log("new month has begun, moving current data to previous");
+          localStorage.previous_data = localStorage.current_data;
+          localStorage.current_month = this.current_month;
+          localStorage.current_data = null;
+        }
+      }
+      
+      // load or create array for current month
+      if (localStorage.current_data) { 
+        this.current_data = JSON.parse(localStorage.current_data);
+        this.data = this.current_data;
+        console.log('current data found and loaded...');
+      } else {
+        this.reset();
+      }
+
+      // also load previous data if available
+      if (localStorage.previous_data) { 
+        this.previous_data = JSON.parse(localStorage.previous_data); 
+        console.log('previous data found and loaded');
+      } else {
+        console.log('no previous data available');
+      }
+    }
+  },
+  methods: {
+    show_previous_month() {
+      this.data = this.previous_data;
+      console.log("switched to previous month")
+    },
+    show_current_month() {
+      this.data = this.current_data;
+      console.log("switched to current month")
+    },
+    persist() {
+      localStorage.current_data = JSON.stringify(this.current_data);
+      localStorage.current_month = this.current_month;
+      if (localStorage.previous_data)
+        localStorage.previous_data = JSON.stringify(this.previous_data);
+      console.log('saved...');
+    },
+    reset() {
+      days = moment().endOf("month").date();
+      this.current_data = new Array(days);
+      for (day = 0; day < days; day++) {
+        this.current_data[day] = new Map([["arr", null], ["dep", null], ["pause", null]]);
+        console.log(this.current_data[day])
+      }
+      this.data = this.current_data;
+      console.log('new array for current data has been created...');
+    },
+    clipboard() {},
+    calculate(data) {
+      try {
+        arrival = moment(data.arr, "HH:mm");
+        departure = moment(data.dep, "HH:mm");
+        pause = moment.duration(parseFloat(data.pause), "hours");
+        daily = moment.duration(departure.diff(arrival)).subtract(pause);
+        if (!daily.isValid()) {
+          return "";
+        }
+        value = daily.asHours().toFixed(2) + " / " + (daily.asHours() - this.workhours).toFixed(2);
+        return value;
+      } catch (e) {
+        console.log(e);
+      }
+    },
+  }
+})
+
+</script>
+</body>
+</html>
